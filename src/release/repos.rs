@@ -181,6 +181,20 @@ pub fn replace_with_old_releases() -> io::Result<()> {
 pub fn restore(release: &str) -> anyhow::Result<()> {
     info!("restoring release files for {}", release);
 
+    fn is_save_file(path: &Path) -> bool { path.extension() == Some(OsStr::from_bytes(b"save")) }
+
+    // Start by removing all of the non-.save files, if .save files exist.
+    if let (Ok(dir1), Ok(dir2)) = (fs::read_dir(PPA_DIR), fs::read_dir(PPA_DIR)) {
+        if iter_files(dir1).any(|entry| is_save_file(&entry.path())) {
+            for entry in iter_files(dir2) {
+                let path = entry.path();
+                if !is_save_file(&path) {
+                    let _ = fs::remove_file(&path);
+                }
+            }
+        }
+    }
+
     let mut files = Vec::new();
 
     let sources_list = PathBuf::from([SOURCES_LIST, ".save"].concat());
@@ -278,7 +292,7 @@ Pin-Priority: 1001
 fn update_preferences_script(release: &str) -> anyhow::Result<()> {
     let data = match release {
         "bionic" | "focal" | "hirsute" => PREFERENCES_BIONIC,
-        _ => PREFERENCES_IMPISH
+        _ => PREFERENCES_IMPISH,
     };
 
     fs::write("/etc/apt/preferences.d/pop-default-settings", data.as_bytes())
