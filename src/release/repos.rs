@@ -181,15 +181,21 @@ pub fn replace_with_old_releases() -> io::Result<()> {
 pub fn restore(release: &str) -> anyhow::Result<()> {
     info!("restoring release files for {}", release);
 
-    fn is_save_file(path: &Path) -> bool { path.extension() == Some(OsStr::from_bytes(b"save")) }
-
     // Start by removing all of the non-.save files, if .save files exist.
-    if let (Ok(dir1), Ok(dir2)) = (fs::read_dir(PPA_DIR), fs::read_dir(PPA_DIR)) {
-        if iter_files(dir1).any(|entry| is_save_file(&entry.path())) {
-            for entry in iter_files(dir2) {
-                let path = entry.path();
-                if !is_save_file(&path) {
-                    let _ = fs::remove_file(&path);
+    if let Ok(dir) = dbg!(fs::read_dir(PPA_DIR)) {
+        info!("checking for extra source files that should be removed.");
+
+        if dbg!(iter_files(dir).any(|entry| dbg!(is_save_file(&dbg!(entry.path()))))) {
+            info!("found save files to restore");
+
+            if let Ok(dir) = dbg!(fs::read_dir(PPA_DIR)) {
+                info!("removing sources which lack .save backups");
+                for entry in iter_files(dir) {
+                    let path = entry.path();
+                    info!("checking if {:?} should be removed", path);
+                    if !is_save_file(&path) {
+                        info!("removing {:?}: {:?}", path, fs::remove_file(&path));
+                    }
                 }
             }
         }
@@ -388,4 +394,17 @@ deb http://apt.pop-os.org/proprietary {0} main
 
 fn iter_files(dir: ReadDir) -> impl Iterator<Item = DirEntry> {
     dir.filter_map(Result::ok).filter(|entry| !entry.metadata().ok().map_or(false, |m| m.is_file()))
+}
+
+fn is_save_file(path: &Path) -> bool { path.extension() == Some(OsStr::from_bytes(b"save")) }
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn is_save_file() {
+        use std::path::Path;
+
+        assert!(!super::is_save_file(Path::new("/etc/apt/sources.list.d/pop-os-apps.sources")));
+        assert!(super::is_save_file(Path::new("/etc/apt/sources.list.d/pop-os-apps.sources.save")));
+    }
 }
