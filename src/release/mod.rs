@@ -181,7 +181,17 @@ pub async fn apt_fetch(uris: HashSet<AptRequest>, func: &dyn Fn(FetchEvent)) -> 
     const DELAY_BETWEEN: u64 = 100;
     const RETRIES: u32 = 3;
 
-    let client = isahc::HttpClient::new().expect("failed to create HTTP Client");
+    use isahc::config::DnsCache;
+    use std::time::Duration;
+
+    let client = isahc::HttpClient::new()
+        // Bail if it takes more than a minute to connect to the server.
+        .connect_timeout(Duration::from_secs(60))
+        // Bail if the transfer rate is < 1KB/sec for more than a minute.
+        .low_speed_timeout(1024, Duration::from_secs(60))
+        // Keep the DNS cached since we're going to fetch packages from the same sources repeatedly.
+        .dns_cache(DnsCache::Forever)
+        .build();
 
     let (fetch_tx, fetch_rx) = flume::bounded(CONCURRENT_FETCHES);
 
